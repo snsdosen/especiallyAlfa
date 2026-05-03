@@ -1,6 +1,11 @@
 #ifndef _BUSCOM_H_
 #define _BUSCOM_H_
 
+    #include "freertos/FreeRTOS.h"
+    #include "freertos/task.h"
+    #include "freertos/queue.h"
+    #include "freertos/semphr.h"
+
     #define LOG_TAG_BUSCOM  "BUSCOM"
 
     #define BUSCOM_RX_PIN       22
@@ -56,6 +61,21 @@
 
     #define MEDIA_TIME_STATUS       0x15    //Time status of the played media
 
-void InitBuscom(void);
+    //All commands available from the head unit
+    #define PLAYER_CMD_PLAY     1
+    #define PLAYER_CMD_FF       2
+    #define PLAYER_CMD_REW      3
+    #define PLAYER_CMD_PAUSE    4
+    #define PLAYER_CMD_NEXT     5
+    #define PLAYER_CMD_PREV     6
+    #define PLAYER_CMD_REP      7
+    #define PLAYER_CMD_RPT      8
+    #define PLAYER_CMD_RDM      9
+    #define PLAYER_CMD_CLR      10
+    #define PLAYER_CMD_EJECT    11
+
+    void InitBuscom(void);
+    void RegisterCommandHandler(QueueHandle_t qHandle);
+    void dispatchCMD(char playerCommand);
 
 #endif

@@ -19,7 +19,18 @@
 #include "avrcp_metadata_utils.h"
 #include "driver/i2s_std.h"
 
+#include "bt_player.h"
+#include "buscom.h"
+
+static bool ffActive = false;
+static bool rewActive = true;
+
+static QueueHandle_t commandQueue = NULL;
+
 static i2s_chan_handle_t my_tx_chan = NULL;
+
+//Address of the connected A2DP source
+static esp_bd_addr_t connected_bda;
 
 /* device name */
 static const char local_device_name[] = CONFIG_EXAMPLE_LOCAL_DEVICE_NAME;
@@ -77,6 +88,18 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
         break;
     }
     case ESP_A2D_CONNECTION_STATE_EVT:
+    esp_a2d_cb_param_t *a2d = (esp_a2d_cb_param_t *)(param);
+        if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
+            //Copy address to localy value
+            memcpy(connected_bda, a2d->conn_stat.remote_bda, ESP_BD_ADDR_LEN);
+            
+            ESP_LOGI(BT_AV_TAG, "Device connected: %02x:%02x:%02x:%02x:%02x:%02x",
+                    connected_bda[0], connected_bda[1], connected_bda[2],
+                    connected_bda[3], connected_bda[4], connected_bda[5]);
+        }
+        bt_app_work_dispatch(bt_a2d_evt_int_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
+        break;
+
     case ESP_A2D_AUDIO_STATE_EVT:
     case ESP_A2D_AUDIO_CFG_EVT:
     case ESP_A2D_SEP_REG_STATE_EVT: {
@@ -262,8 +285,102 @@ void init_i2s1_for_32bit_dac() {
     ESP_ERROR_CHECK(i2s_channel_enable(my_tx_chan));
 }
 
+//Return status of the connected device
+bool isRemoteConnected(){
+    esp_bd_addr_t empty_bda = {0};
+    
+    return (memcmp(connected_bda, empty_bda, ESP_BD_ADDR_LEN) != 0);
+}
+
+//Disconnect connected source device
+void disconnectSource() {
+    if(isRemoteConnected()) esp_a2d_sink_disconnect(connected_bda);
+}
+
+void send_avrc_cmd(uint8_t cmd_id) {
+    if(!isRemoteConnected()) return;
+
+    //Button pressed
+    esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_PRESSED);
+    
+    //Button released
+    esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_RELEASED);
+}
+
+void startFF(){
+    if(!isRemoteConnected()) return;
+    ffActive = true;
+    esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_FAST_FORWARD, ESP_AVRC_PT_CMD_STATE_PRESSED);
+}
+
+void startREW(){
+    if(!isRemoteConnected()) return;
+    rewActive = true;
+    esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_REWIND, ESP_AVRC_PT_CMD_STATE_PRESSED);
+}
+
+static void command_task(void *pvParameters){
+  char message;
+
+  for(;;){
+        if(xQueueReceive(commandQueue, &message, portMAX_DELAY)){
+            switch(message){
+                case PLAYER_CMD_PLAY:
+                    //Depress ff/rew buttons
+                    if(ffActive){
+                        ffActive = false;
+                        esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_FAST_FORWARD, ESP_AVRC_PT_CMD_STATE_RELEASED);
+                    }
+
+                    if(rewActive){
+                        ffActive = false;
+                        esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_REWIND, ESP_AVRC_PT_CMD_STATE_RELEASED);
+                    }
+
+                    send_avrc_cmd(ESP_AVRC_PT_CMD_PLAY);
+                    break;
+
+                case PLAYER_CMD_PAUSE:
+                    send_avrc_cmd(ESP_AVRC_PT_CMD_PAUSE);
+                    break;
+
+                case PLAYER_CMD_EJECT:
+                    disconnectSource();
+                    break;
+
+                case PLAYER_CMD_PREV:
+                    send_avrc_cmd(ESP_AVRC_PT_CMD_BACKWARD);
+                    break;
+
+                case PLAYER_CMD_NEXT:
+                    send_avrc_cmd(ESP_AVRC_PT_CMD_FORWARD);
+                    break;
+
+                case PLAYER_CMD_FF:
+                    startFF();
+                    break;
+
+                case PLAYER_CMD_REW:
+                    startREW();
+                    break;
+            }
+        }
+  }
+}
+
 void InitBTPlayer(void)
 {
+    commandQueue = xQueueCreate(100, sizeof(char));
+    if(!commandQueue){
+        ESP_LOGE(LOG_TAG_A2DP, "Failed to create command queue");
+        return;
+    }
+
+    RegisterCommandHandler(commandQueue);
+
+    xTaskCreate(command_task, "cmd_handler_task", 2048, NULL, 10, NULL);
+    ESP_LOGI(LOG_TAG_A2DP, "Command task registered");
+
     ESP_ERROR_CHECK(bredr_app_common_init());
 
     bt_app_task_start_up();

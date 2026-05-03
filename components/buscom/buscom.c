@@ -24,6 +24,18 @@ static uint8_t activePState = PSTATE_PAUSE;
 //Ringbuffer for data transmission
 RingbufHandle_t dataRingbuf;
 
+static QueueHandle_t commandQueueHandle = NULL;
+
+void RegisterCommandHandler(QueueHandle_t qHandle){
+  commandQueueHandle = qHandle;
+  ESP_LOGI(LOG_TAG_BUSCOM, "Got command handle from bluetooth");
+}
+
+//Send a command to command queues
+void dispatchCMD(char playerCommand){
+  if(commandQueueHandle) xQueueSend(commandQueueHandle, &playerCommand, 0);
+}
+
 void ResetTime(){
     currentMinute = 0;
     currentSecond = 0;
@@ -75,7 +87,7 @@ void CdInResponse() {
 
     if(discInserted){
         vTaskDelay(10 / portTICK_PERIOD_MS);
-        ComposeResponse((uint8_t[]){0x36, 0x2F, 0x0D, 0x38, 0x0D, 0x01, 0x00}, 7);
+        ComposeResponse((uint8_t[]){0x36, 0x2F, 0x63, 0x38, 0x63, 0x01, 0x00}, 7);
     }
 }
 
@@ -139,7 +151,44 @@ void CdReadyResponse(){
     //ComposeResponse((uint8_t[]){0x15, 0x13, 0x00, 0x01, 0x03, 0x01}, 6);
 }
 
+//Send AVRCP forward or backward on track change
+void sync_tracks_with_radio(int current_track, int target_track) {
+    if (target_track < 1 || target_track > 99) return;
+    if (target_track == current_track) return;
+
+    int forward_dist, backward_dist;
+
+    //Forward steps
+    if (target_track > current_track) {
+        forward_dist = target_track - current_track;
+    } else {
+        forward_dist = (99 - current_track) + target_track;
+    }
+
+    //Backward steps
+    if (target_track < current_track) {
+        backward_dist = current_track - target_track;
+    } else {
+        backward_dist = current_track + (99 - target_track);
+    }
+
+    //Send commands
+    if (forward_dist <= backward_dist) {
+        ESP_LOGI("BT_PLAYER", "Forward %d steps", forward_dist);
+        for (int i = 0; i < forward_dist; i++) {
+            dispatchCMD(PLAYER_CMD_NEXT);
+        }
+    } else {
+        ESP_LOGI("BT_PLAYER", "Backward %d steps", backward_dist);
+        for (int i = 0; i < backward_dist; i++) {
+            dispatchCMD(PLAYER_CMD_PREV);
+        }
+    }
+}
+
 void SeekToResponse(uint8_t trackNum){
+    uint8_t cTrack = currentTrack;
+
     enableTicker = false;
     currentTrack = trackNum;
     ResetTime();
@@ -148,6 +197,7 @@ void SeekToResponse(uint8_t trackNum){
     ComposeResponse((uint8_t[]){0x72, 0x07, 0x12}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ComposeResponse((uint8_t[]){0x15, 0x00, 0x00, 0x00, trackNum, 0x00}, 6);
+    sync_tracks_with_radio(cTrack, trackNum);
     vTaskDelay(20 / portTICK_PERIOD_MS);        //Fake seek delay
     ComposeResponse((uint8_t[]){0x72, 0x07, 0x32}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -231,6 +281,7 @@ static void buscom_rx_task(void *arg){
 
                 case HU_HEADER_EJECT:
                     ESP_LOGI(LOG_TAG_BUSCOM, "EJECT");
+                    dispatchCMD(PLAYER_CMD_EJECT);
                     CdEjectResponse();
                     break;
 
@@ -251,6 +302,7 @@ static void buscom_rx_task(void *arg){
                             case MODULE_INACTIVE:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "MODULE INACTIVE");
                                 ModuleInactiveResponse();
+                                dispatchCMD(PLAYER_CMD_PAUSE);
                                 break;
                             }
                     }
@@ -263,18 +315,22 @@ static void buscom_rx_task(void *arg){
                         switch(data[2]){
                             case PSTATE_PLAY:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PLAY");
+                                dispatchCMD(PLAYER_CMD_PLAY);
                                 break;
 
                             case PSTATE_PAUSE:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PAUSE");
+                                dispatchCMD(PLAYER_CMD_PAUSE);
                                 break;
 
                             case PSTATE_REW:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: REWIND");
+                                dispatchCMD(PLAYER_CMD_REW);
                                 break;
 
                             case PSTATE_FF:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: FAST FORWARD");
+                                dispatchCMD(PLAYER_CMD_FF);
                                 break;
                         }
 

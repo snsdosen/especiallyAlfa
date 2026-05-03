@@ -29,12 +29,13 @@ for a couple of seconds, enough to put original CD module in standby.
 ## What is implemented:
 * CD emulator on the data bus, head unit unlocks and uses CD mode
 * Bluetooth pairing and audio streaming
+* Prev/Next/FF/REW/Play/Pause/etc commands.
 
 ## Things yet to be implemented:
 * Enter deep sleep on standby to conserve car battery.
+* Remember last connected device and auto connect on startup
 * Time sync with phone playing the music. For now module increases and displays arbitrary time.
-* Prev/Next/FF/REW/Play/Pause/etc commands.
-* Metadata support. ESP32 receives it and outputs it to a debug console only. 
+* Metadata support. ESP32 receives it and outputs it to a debug console only.
 
 ## Requirements:
 * Dev board with ESP-WROOM-32 module.
@@ -50,8 +51,8 @@ Connections:
 | LRCK      | GPIO 4          |
 | DATA      | GPIO 18          |
 | BCK       | GPIO 5          |
-| TXD       | Via voltage shifter to GPIO 23 |
-| RXD       | Via voltage shifter to GPIO 22 |
+| TXD       | Via level shifter to GPIO 23 |
+| RXD       | Via level shifter to GPIO 22 |
 
 * On the bench I powered the module via USB but in the
   car it will be powered via available 5V VUC.
