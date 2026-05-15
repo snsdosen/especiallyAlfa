@@ -11,7 +11,7 @@
 <img width="800" height="452" alt="esp32 inside" src="https://github.com/user-attachments/assets/1d9666b2-b982-4ca9-bdd0-af2082f313c7" />
 
 ## Schematic:
-<img width="1685" height="825" alt="especiallyAlfa diag" src="https://github.com/user-attachments/assets/e5f4328f-8df9-4337-a1a2-37531df65a8c" />
+<img width="1685" height="825" alt="especiallyAlfa diag" src="https://github.com/user-attachments/assets/f8bfb50a-eee8-40f0-9f8d-09a7e421fe37" />
 <br><br>
 
 ## Notes:
