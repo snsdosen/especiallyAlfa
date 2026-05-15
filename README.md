@@ -8,8 +8,11 @@
 * Internal mod, replaces and emulates CD assembly with bluetooth capable ESP32.
 * Audio transfer is purely digital via I2S bus using head unit's own DAC.
 
-## Connector pinout:
-<img width="373" height="317" alt="Alfa blaupunkt pinout" src="https://github.com/user-attachments/assets/5228023b-efcb-4044-aa36-4dfc56efdd82" />
+<img width="800" height="452" alt="esp32 inside" src="https://github.com/user-attachments/assets/1d9666b2-b982-4ca9-bdd0-af2082f313c7" />
+
+## Schematic:
+<img width="1685" height="825" alt="especiallyAlfa diag" src="https://github.com/user-attachments/assets/e5f4328f-8df9-4337-a1a2-37531df65a8c" />
+<br><br>
 
 ## Notes:
 * This is beta software, it still needs polishing to
@@ -23,7 +26,7 @@ available all the time regardless if the ACC is on.
 * DAC on the other hand uses 3.3V TTL logic so no shifters are needed
 on the fast audio transport lines which greatly simplifies implementation.
 
-* VCC 12+ is switched off in standby but stays hot after ACC is off
+* VCC 9V is switched off in standby but stays hot after ACC is off
 for a couple of seconds, enough to put original CD module in standby.
 
 ## What is implemented:
@@ -46,14 +49,14 @@ Connections:
 
 | Head unit | ESP pin      |
 |:--------- | :----------- |
-| VCC +12V  | Via resistor voltage divider to GPIO 27 (power monitor) |
+| VCC +9V  | Via resistor voltage divider to GPIO 27 (power monitor) |
 | VUC +5V   | Module power, 5V for level shifter|
 | LRCK      | GPIO 4          |
 | DATA      | GPIO 18          |
 | BCK       | GPIO 19           |
-| TXD       | GPIO 17 |
+| TXD       | Via level shifter to GPIO 17 |
 | RXD       | Via level shifter to GPIO 16 |
 
-* We need to monitor 12V VCC line (9V actually) to react to it's
+* We need to monitor 9V VCC line to react to it's
   state so a resistor voltage divider is needed to drop the
   voltage to ESP's required 3.3V level. I recommend 10K+20K resistor voltage divider
