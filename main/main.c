@@ -7,10 +7,12 @@
 #include <string.h>
 
 #include "buscom.h"
+#include "textcom.h"
 #include "bt_player.h"
 
 void app_main(void)
 {
     InitBuscom();
+    //InitTextcom();
     InitBTPlayer();
 }

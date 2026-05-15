@@ -1,26 +1,4 @@
-#include <stdio.h>
-#include <string.h>
-
-#include "esp_log.h"
-#include "esp_bt_device.h"
-#include "esp_gap_bt_api.h"
-#include "esp_a2dp_api.h"
-#include "esp_avrc_api.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-#include "bt_app_core_utils.h"
-#include "bredr_app_common_utils.h"
-#include "a2dp_sink_common_utils.h"
-#include "a2dp_utils_tags.h"
-#include "a2dp_sink_int_codec_utils.h"
-#include "avrcp_utils_tags.h"
-#include "avrcp_common_utils.h"
-#include "avrcp_metadata_utils.h"
-#include "driver/i2s_std.h"
-
 #include "bt_player.h"
-#include "buscom.h"
 
 static bool ffActive = false;
 static bool rewActive = true;
@@ -31,6 +9,9 @@ static i2s_chan_handle_t my_tx_chan = NULL;
 
 //Address of the connected A2DP source
 static esp_bd_addr_t connected_bda;
+
+//Debounce ms counter for eject/connect event
+static int64_t lastEject = 0;
 
 /* device name */
 static const char local_device_name[] = CONFIG_EXAMPLE_LOCAL_DEVICE_NAME;
@@ -96,7 +77,24 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
             ESP_LOGI(BT_AV_TAG, "Device connected: %02x:%02x:%02x:%02x:%02x:%02x",
                     connected_bda[0], connected_bda[1], connected_bda[2],
                     connected_bda[3], connected_bda[4], connected_bda[5]);
+
+            esp_bd_addr_t savedAddress;
+
+            //Save device to storage if new
+            if (loadDeviceAddr(savedAddress) != ESP_OK || 
+                    memcmp(savedAddress, param->conn_stat.remote_bda, ESP_BD_ADDR_LEN) != 0) {
+                    
+                    saveDeviceAddr(param->conn_stat.remote_bda);
+                    ESP_LOGI("BT_APP", "Device saved to NVS");
+                } else {
+                    ESP_LOGI("BT_APP", "Device already known");
+                }
+
+        }else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
+                //Remove active connected device address
+                memset(connected_bda, 0, ESP_BD_ADDR_LEN);
         }
+
         bt_app_work_dispatch(bt_a2d_evt_int_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
         break;
 
@@ -180,7 +178,6 @@ static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
         break;
     }
 }
-
 
 static void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
 {
@@ -270,9 +267,9 @@ void init_i2s1_for_32bit_dac() {
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = GPIO_NUM_5,
-            .ws   = GPIO_NUM_4,
-            .dout = GPIO_NUM_18,
+            .bclk = PLAYER_BCLK_PIN,
+            .ws   = PLAYER_LRCK_PIN,
+            .dout = PLAYER_DATA_PIN,
             .din  = I2S_GPIO_UNUSED,
         },
     };
@@ -285,6 +282,28 @@ void init_i2s1_for_32bit_dac() {
     ESP_ERROR_CHECK(i2s_channel_enable(my_tx_chan));
 }
 
+//Save device address to NVS
+void saveDeviceAddr(esp_bd_addr_t bda) {
+    nvs_handle_t my_handle;
+    if (nvs_open("storage", NVS_READWRITE, &my_handle) == ESP_OK) {
+        nvs_set_blob(my_handle, "last_bda", bda, ESP_BD_ADDR_LEN);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+    }
+}
+
+//Load device from NVS storage
+esp_err_t loadDeviceAddr(esp_bd_addr_t bda) {
+    nvs_handle_t my_handle;
+    size_t size = ESP_BD_ADDR_LEN;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
+    if (err == ESP_OK) {
+        err = nvs_get_blob(my_handle, "last_bda", bda, &size);
+        nvs_close(my_handle);
+    }
+    return err;
+}
+
 //Return status of the connected device
 bool isRemoteConnected(){
     esp_bd_addr_t empty_bda = {0};
@@ -294,7 +313,10 @@ bool isRemoteConnected(){
 
 //Disconnect connected source device
 void disconnectSource() {
-    if(isRemoteConnected()) esp_a2d_sink_disconnect(connected_bda);
+    if(isRemoteConnected()) {
+        esp_a2d_sink_disconnect(connected_bda);
+        lastEject = esp_timer_get_time();
+    }
 }
 
 void send_avrc_cmd(uint8_t cmd_id) {
@@ -325,6 +347,16 @@ static void command_task(void *pvParameters){
   for(;;){
         if(xQueueReceive(commandQueue, &message, portMAX_DELAY)){
             switch(message){
+                case PLAYER_CMD_ACTIVE:
+                    if(!isRemoteConnected()){
+
+                        esp_bd_addr_t savedAddress;
+                        int64_t currentTime = esp_timer_get_time();
+
+                        if (loadDeviceAddr(savedAddress) == ESP_OK && !(currentTime - lastEject < COOLDOWN_TIME_US)) esp_a2d_sink_connect(savedAddress);
+                    }
+                    break;
+
                 case PLAYER_CMD_PLAY:
                     //Depress ff/rew buttons
                     if(ffActive){
@@ -377,6 +409,13 @@ void InitBTPlayer(void)
     }
 
     RegisterCommandHandler(commandQueue);
+
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
     xTaskCreate(command_task, "cmd_handler_task", 2048, NULL, 10, NULL);
     ESP_LOGI(LOG_TAG_A2DP, "Command task registered");

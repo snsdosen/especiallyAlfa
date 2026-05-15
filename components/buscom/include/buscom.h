@@ -8,11 +8,10 @@
 
     #define LOG_TAG_BUSCOM  "BUSCOM"
 
-    #define BUSCOM_RX_PIN       22
-    #define BUSCOM_TX_PIN       23
-    #define BUSCOM_RX_SNIFF     21
+    #define BUSCOM_RX_PIN       16
+    #define BUSCOM_TX_PIN       17
 
-    #define POWER_MONITOR_PIN   19
+    #define POWER_MONITOR_PIN   27
 
     //Head unit command headers
     #define HU_HEADER_ACTIVITY      0x09    //Module activity
@@ -73,6 +72,7 @@
     #define PLAYER_CMD_RDM      9
     #define PLAYER_CMD_CLR      10
     #define PLAYER_CMD_EJECT    11
+    #define PLAYER_CMD_ACTIVE   12
 
     void InitBuscom(void);
     void RegisterCommandHandler(QueueHandle_t qHandle);

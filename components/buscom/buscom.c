@@ -4,10 +4,11 @@
 #include "freertos/task.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+#include "esp_sleep.h"
+#include "driver/rtc_io.h"
 #include "esp_log.h"
 #include "buscom.h"
 
-//static TaskHandle_t buscom_task_hdl = NULL;
 static TaskHandle_t buscom_rx_task_hdl = NULL;
 static TaskHandle_t buscom_tx_task_hdl = NULL;
 static TaskHandle_t buscom_tick_task_hdl = NULL;
@@ -147,8 +148,7 @@ void ExModuleStatusResponse(){
 void CdReadyResponse(){
     ComposeResponse((uint8_t[]){0xE2, 0x03, 0x79}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    ComposeResponse((uint8_t[]){0x15, 0x03, 0x00, 0x01, 0x01, 0x01}, 6);
-    //ComposeResponse((uint8_t[]){0x15, 0x13, 0x00, 0x01, 0x03, 0x01}, 6);
+    ComposeResponse((uint8_t[]){0x15, 0x00, 0x00, 0x01, currentTrack, 0x01}, 6);
 }
 
 //Send AVRCP forward or backward on track change
@@ -292,6 +292,7 @@ static void buscom_rx_task(void *arg){
                         switch(data[0]){
                             case MODULE_ACTIVE:
                                 ESP_LOGI(LOG_TAG_BUSCOM, "MODULE ACTIVE");
+                                dispatchCMD(PLAYER_CMD_ACTIVE);
                                 break;
 
                             case MODULE_STANDBY:
@@ -368,55 +369,6 @@ static void buscom_tx_task(void *arg){
         }
 }
 
-//Logging task for the bus debugging
-static void buscom_logger_task(void *arg){
-
-    //Configure UART 1 for RX
-    const uart_port_t uart_num1 = UART_NUM_2;
-    uart_config_t uart_config1 = {
-        .baud_rate = 9600,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_EVEN,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .rx_flow_ctrl_thresh = 122,
-    };
-
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, -1, BUSCOM_RX_SNIFF, -1, -1));
-
-    // Configure UART parameters
-    ESP_ERROR_CHECK(uart_param_config(uart_num1, &uart_config1));
-
-    // Setup UART buffered IO with event queue
-    const int uart_buffer_size = (1024 * 2);
-    QueueHandle_t uart_queue1;
-
-    // Install UART driver using an event queue here
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, uart_buffer_size, uart_buffer_size, 10, &uart_queue1, 0));
-
-    size_t inBuffer1 = 0;
-    uint8_t data[128];
-    int length = 0;
-
-    //Do the task
-    for(;;){
-
-        //Data from CD drive
-        uart_get_buffered_data_len(UART_NUM_2, &inBuffer1);
-        if(inBuffer1 > 0){
-            length = uart_read_bytes(UART_NUM_2, data, 20, 3 / portTICK_PERIOD_MS);
-
-            for(int i = 0; i < length; i++){
-                printf("%.2X ", data[i]);
-            }
-
-            ESP_LOGE(LOG_TAG_BUSCOM, "<- CD RESPONSE");
-        }
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-}
-
 //Seconds timer for progress report
 static void buscom_tick_task(void *arg){
     for(;;){
@@ -424,6 +376,10 @@ static void buscom_tick_task(void *arg){
 
         if(enableTicker){
             SendTime();
+
+            //Auto connect on 5th second
+            if(currentSecond == 0x05) dispatchCMD(PLAYER_CMD_ACTIVE);
+
             if(currentSecond < 59) currentSecond++;
             else{
                 currentSecond = 0;
@@ -438,6 +394,7 @@ static const char *TAG = "PWR_MON";
 
 void power_on_routine() {
     ESP_LOGW(TAG, "Sending warm CD status");
+    //CdInsertSequence();
     WarmBoot();
 }
 
@@ -479,6 +436,17 @@ void power_monitor_task(void *pvParameters) {
                     power_is_active = false;
                     low_duration_ms = 0;
                     enableTicker = false;
+
+                    //Disconnect remote device
+                    dispatchCMD(PLAYER_CMD_EJECT);
+
+                    vTaskDelay(pdMS_TO_TICKS(300));
+
+                    //Go to sleep
+                    rtc_gpio_init(POWER_MONITOR_PIN);
+                    rtc_gpio_set_direction(POWER_MONITOR_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+                    esp_sleep_enable_ext0_wakeup(POWER_MONITOR_PIN, 1);
+                    esp_deep_sleep_start();
                 }
             }
         }
@@ -527,7 +495,6 @@ void InitBuscom(void)
     //Configure serial port
     SetUpBuscomPort();
 
-    //xTaskCreate(buscom_logger_task, "buscom", 2048, NULL, 5, &buscom_task_hdl);
     xTaskCreate(buscom_rx_task, "buscom_rx", 2048, NULL, 5, &buscom_rx_task_hdl);
     xTaskCreate(buscom_tx_task, "buscom_tx", 2048, NULL, 5, &buscom_tx_task_hdl);
     xTaskCreate(power_monitor_task, "pwr_monitor", 2048, NULL, 10, NULL);

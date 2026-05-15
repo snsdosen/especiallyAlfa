@@ -30,10 +30,10 @@ for a couple of seconds, enough to put original CD module in standby.
 * CD emulator on the data bus, head unit unlocks and uses CD mode
 * Bluetooth pairing and audio streaming
 * Prev/Next/FF/REW/Play/Pause/etc commands.
-
-## Things yet to be implemented:
 * Enter deep sleep on standby to conserve car battery.
 * Remember last connected device and auto connect on startup
+
+## Things yet to be implemented:
 * Time sync with phone playing the music. For now module increases and displays arbitrary time.
 * Metadata support. ESP32 receives it and outputs it to a debug console only.
 
@@ -46,19 +46,14 @@ Connections:
 
 | Head unit | ESP pin      |
 |:--------- | :----------- |
-| VCC +12V  | Via voltage divider to GPIO 19 (power monitor) |
-| VUC +5V   | Module power*, 5V for level shifter|
+| VCC +12V  | Via resistor voltage divider to GPIO 27 (power monitor) |
+| VUC +5V   | Module power, 5V for level shifter|
 | LRCK      | GPIO 4          |
 | DATA      | GPIO 18          |
-| BCK       | GPIO 5          |
-| TXD       | Via level shifter to GPIO 23 |
-| RXD       | Via level shifter to GPIO 22 |
+| BCK       | GPIO 19           |
+| TXD       | GPIO 17 |
+| RXD       | Via level shifter to GPIO 16 |
 
-* On the bench I powered the module via USB but in the
-  car it will be powered via available 5V VUC.
-  <br>Further tests are needed to see if the power draw of ESP32
-  is allowed on the 5V VUC.
-
-* We need to monitor 12V VCC line to react to it's
+* We need to monitor 12V VCC line (9V actually) to react to it's
   state so a resistor voltage divider is needed to drop the
-  voltage to ESP's required 3.3V level.
+  voltage to ESP's required 3.3V level. I recommend 10K+20K resistor voltage divider
