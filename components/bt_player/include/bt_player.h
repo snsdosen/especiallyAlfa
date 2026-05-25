@@ -11,6 +11,7 @@
 #include "esp_avrc_api.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/ringbuf.h"
 
 #include "bt_app_core_utils.h"
 #include "bredr_app_common_utils.h"
@@ -34,6 +35,8 @@
 #define PLAYER_DATA_PIN GPIO_NUM_18
 #define PLAYER_LRCK_PIN GPIO_NUM_4
 #define PLAYER_BCLK_PIN GPIO_NUM_19
+
+#define RINGBUF_SIZE (32 * 1024)
 
 void InitBTPlayer(void);
 

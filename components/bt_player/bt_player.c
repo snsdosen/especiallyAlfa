@@ -13,6 +13,8 @@ static esp_bd_addr_t connected_bda;
 //Debounce ms counter for eject/connect event
 static int64_t lastEject = 0;
 
+static RingbufHandle_t s_a2d_ringbuf = NULL;
+
 /* device name */
 static const char local_device_name[] = CONFIG_EXAMPLE_LOCAL_DEVICE_NAME;
 
@@ -110,24 +112,13 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
     }
 }
 
-static uint32_t buffer32[4096]; 
-
 static void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len)
 {
-    size_t bytes_written;
-    if (my_tx_chan == NULL) return;
-
-    int16_t *samples16 = (int16_t *)data;
-    uint32_t num_samples = len / 2;
-    
-    if (num_samples > 4096) num_samples = 4096;
-
-    for (int i = 0; i < num_samples; i++) {
-        uint32_t sample32 = (uint32_t)((uint16_t)samples16[i]);
-        buffer32[i] = ~sample32;
+    if (s_a2d_ringbuf == NULL) {
+        return;
     }
 
-    i2s_channel_write(my_tx_chan, buffer32, num_samples * 4, &bytes_written, portMAX_DELAY);
+    xRingbufferSend(s_a2d_ringbuf, (void *)data, len, 0);
 }
 
 static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
@@ -325,6 +316,9 @@ void send_avrc_cmd(uint8_t cmd_id) {
     //Button pressed
     esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_PRESSED);
     
+    //Debounce
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+
     //Button released
     esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_RELEASED);
 }
@@ -376,6 +370,9 @@ static void command_task(void *pvParameters){
                     send_avrc_cmd(ESP_AVRC_PT_CMD_PAUSE);
                     break;
 
+                case PLAYER_CMD_REP:
+                    break;
+
                 case PLAYER_CMD_EJECT:
                     disconnectSource();
                     break;
@@ -400,8 +397,57 @@ static void command_task(void *pvParameters){
   }
 }
 
+//Output PCM data from the ringbuffer to the I2S port
+static void i2s_audio_tx_task(void *pvParameters)
+{
+    size_t item_size;
+    size_t bytes_written;
+    
+    uint32_t *local_buffer32 = malloc(4096 * sizeof(uint32_t));
+    if (local_buffer32 == NULL) {
+        ESP_LOGE("I2S_TASK", "Not enough memory for buffer.");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (1) {
+        uint8_t *data = (uint8_t *)xRingbufferReceive(s_a2d_ringbuf, &item_size, pdMS_TO_TICKS(20));
+
+        if (data != NULL) {
+            if (my_tx_chan != NULL) {
+                int16_t *samples16 = (int16_t *)data;
+                uint32_t num_samples = item_size / 2;
+
+                if (num_samples > 4096) {
+                    num_samples = 4096;
+                }
+
+                for (int i = 0; i < num_samples; i++) {
+                    uint32_t sample32 = (uint32_t)((uint16_t)samples16[i]);
+                    local_buffer32[i] = ~sample32; 
+                }
+
+                i2s_channel_write(my_tx_chan, local_buffer32, num_samples * 4, &bytes_written, portMAX_DELAY);
+            }
+
+            vRingbufferReturnItem(s_a2d_ringbuf, (void *)data);
+        } else {
+
+        }
+    }
+
+    free(local_buffer32);
+    vTaskDelete(NULL);
+}
+
 void InitBTPlayer(void)
 {
+    s_a2d_ringbuf = xRingbufferCreate(RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF);
+    if (s_a2d_ringbuf == NULL) {
+        ESP_LOGE("APP", "Failed to init ringbuffer.");
+        return;
+    }
+
     commandQueue = xQueueCreate(100, sizeof(char));
     if(!commandQueue){
         ESP_LOGE(LOG_TAG_A2DP, "Failed to create command queue");
@@ -424,6 +470,9 @@ void InitBTPlayer(void)
 
     bt_app_task_start_up();
     init_i2s1_for_32bit_dac();
+
+    xTaskCreate(i2s_audio_tx_task, "i2s_tx_task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    ESP_LOGI(LOG_TAG_A2DP, "I2S task registered");
 
     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
 }

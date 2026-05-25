@@ -154,7 +154,12 @@ void CdReadyResponse(){
 //Send AVRCP forward or backward on track change
 void sync_tracks_with_radio(int current_track, int target_track) {
     if (target_track < 1 || target_track > 99) return;
-    if (target_track == current_track) return;
+
+    //If it's the same track it's repeated
+    if (target_track == current_track) {
+        dispatchCMD(PLAYER_CMD_REP);
+        return;
+    }
 
     int forward_dist, backward_dist;
 
@@ -377,7 +382,7 @@ static void buscom_tick_task(void *arg){
         if(enableTicker){
             SendTime();
 
-            //Auto connect on 5th second
+            //Will force auto connect to stored device on 5th second
             if(currentSecond == 0x05) dispatchCMD(PLAYER_CMD_ACTIVE);
 
             if(currentSecond < 59) currentSecond++;
@@ -394,7 +399,6 @@ static const char *TAG = "PWR_MON";
 
 void power_on_routine() {
     ESP_LOGW(TAG, "Sending warm CD status");
-    //CdInsertSequence();
     WarmBoot();
 }
 

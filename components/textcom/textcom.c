@@ -4,78 +4,73 @@
 #include "freertos/task.h"
 #include "driver/spi_slave.h"
 #include "driver/gpio.h"
-#include "esp_timer.h"
+#include "esp_log.h"
 #include "textcom.h"
 
-#define GPIO_SCLK 22  // D2 (Crvena linija)
-#define GPIO_MOSI 04  // D1 (Narančasta linija)
-#define GPIO_CS_FAKE 15 // Pin koji ćemo softverski kontrolirati kao CS
+static const char *TAG = "ALFA_HARDWARE_SPI";
 
-#define BUFFER_SIZE 128
+#define GPIO_MOSI    22
+#define GPIO_CLK     23
+#define GPIO_FAKE_CS 21
+
+#define BUFFER_SIZE  64
 WORD_ALIGNED_ATTR uint8_t rx_buffer[BUFFER_SIZE];
 
-volatile bool bus_ready = false;
+void alfa_spi_hardware_task(void *pvParameters) {
+    esp_err_t ret;
 
-// Interrupt koji čeka prvi takt clocka nakon pauze
-static void IRAM_ATTR sclk_isr_handler(void* arg) {
-    // Čim detektiramo prvi impuls, "spuštamo" CS na nulu da SPI Slave krene
-    gpio_set_level(GPIO_CS_FAKE, 0); 
-    bus_ready = true;
-}
-
-void spi_task(void *pv) {
-    // 1. Konfiguracija FAKE CS pina
     gpio_config_t cs_cfg = {
-        .pin_bit_mask = (1ULL << GPIO_CS_FAKE),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = 0,
+        .pin_bit_mask = (1ULL << GPIO_FAKE_CS),
+        .mode = GPIO_MODE_INPUT_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&cs_cfg);
-    gpio_set_level(GPIO_CS_FAKE, 1); // Počni u High (SPI Slave spava)
+    gpio_set_level(GPIO_FAKE_CS, 0);
 
-    // 2. Konfiguracija SPI Slave
     spi_bus_config_t buscfg = {
         .mosi_io_num = GPIO_MOSI,
-        .sclk_io_num = GPIO_SCLK,
         .miso_io_num = -1,
+        .sclk_io_num = GPIO_CLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = BUFFER_SIZE
     };
+
     spi_slave_interface_config_t slvcfg = {
-        .mode = 1, // Mode 0 (Clock idle LOW)
-        .spics_io_num = GPIO_CS_FAKE,
-        .queue_size = 1,
+        .mode = 1,
+        .spics_io_num = GPIO_FAKE_CS,
+        .queue_size = 4,
+        .flags = 0
     };
-    spi_slave_initialize(SPI2_HOST, &buscfg, &slvcfg, SPI_DMA_CH_AUTO);
 
-    // 3. Konfiguracija Interrupta na SCLK za detekciju početka
-    gpio_install_isr_service(0);
-    gpio_set_intr_type(GPIO_SCLK, GPIO_INTR_POSEDGE);
-    gpio_isr_handler_add(GPIO_SCLK, sclk_isr_handler, NULL);
+    ret = spi_slave_initialize(SPI2_HOST, &buscfg, &slvcfg, SPI_DMA_CH_AUTO);
+    ESP_ERROR_CHECK(ret);
 
-    while(1) {
-        if (bus_ready) {
-            spi_slave_transaction_t t = {
-                .length = BUFFER_SIZE * 8,
-                .rx_buffer = rx_buffer,
-            };
+    spi_slave_transaction_t t;
 
-            if (spi_slave_transmit(SPI2_HOST, &t, pdMS_TO_TICKS(50)) == ESP_OK) {
-                // Ispis onoga što smo ulovili
-                if (rx_buffer[0] != 0) {
-                    printf("Ulovljeno: ");
-                    for(int i=0; i<32; i++) printf("%02X ", rx_buffer[i]);
-                    printf("\n");
-                }
+    while (1) {
+        memset(rx_buffer, 0, BUFFER_SIZE);
+        memset(&t, 0, sizeof(t));
+
+        t.length = BUFFER_SIZE * 8; 
+        t.rx_buffer = rx_buffer;
+
+        ret = spi_slave_transmit(SPI2_HOST, &t, portMAX_DELAY);
+
+        if (ret == ESP_OK) {
+            printf("Alfa HARDWARE RX: ");
+            for (int i = 0; i < 16; i++) {
+                printf("0x%02X ", rx_buffer[i]);
             }
-
-            // Resetiraj za idući paket
-            gpio_set_level(GPIO_CS_FAKE, 1);
-            bus_ready = false;
-            vTaskDelay(pdMS_TO_TICKS(20)); // Čekaj da prođe ostatak paketa i nastupi Idle
+            printf("\n");
         }
-        vTaskDelay(1);
+        
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void InitTextcom(void){
-    xTaskCreate(spi_task, "clk_mon", 4096, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(alfa_spi_hardware_task, "alfa_spi_hw_task", 4096, NULL, 15, NULL, 1);
 }
