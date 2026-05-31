@@ -4,7 +4,7 @@
 <img width="800" height="600" alt="IMG_0318" src="https://github.com/user-attachments/assets/8d140577-d5e1-46b0-ad30-b797b4ef76bb" />
 <br><br>
 
-* Add bluetooth capabilities to your Alfa 156 FL (possibly GT and 147 too, need further testing) radio using only ESP32 dev module
+* Add bluetooth capabilities to your Alfa 156 FL radio (possibly GT and 147) using only ESP32 dev module
 * Internal mod, replaces and emulates CD assembly with bluetooth capable ESP32.
 * Audio transfer is purely digital via I2S bus using head unit's own DAC.
 
@@ -38,7 +38,7 @@ lower power consumption without losing performance of functionality
 * Prev/Next/FF/REW/Play/Pause/etc commands.
 * Enter deep sleep on standby to conserve car battery.
 * Remember last connected device and auto connect on startup
-* Time sync with phone playing the music. For now module increases and displays arbitrary time.
+* Display time sync with phone playing the music.
 
 ## Things yet to be implemented:
 * Title metadata support. ESP32 receives it and outputs it to a debug console only.
