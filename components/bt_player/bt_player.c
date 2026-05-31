@@ -1,5 +1,6 @@
 #include "bt_player.h"
 
+//FF/REW activity flags
 static bool ffActive = false;
 static bool rewActive = true;
 
@@ -14,6 +15,10 @@ static esp_bd_addr_t connected_bda;
 static int64_t lastEject = 0;
 
 static RingbufHandle_t s_a2d_ringbuf = NULL;
+
+//Current source play state
+int sourcePlayState = 0x2;
+bool supportsAutoUpdate = false;
 
 /* device name */
 static const char local_device_name[] = CONFIG_EXAMPLE_LOCAL_DEVICE_NAME;
@@ -121,6 +126,52 @@ static void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len)
     xRingbufferSend(s_a2d_ringbuf, (void *)data, len, 0);
 }
 
+//Request audio metadata from remote device
+void requestMetadata(){
+    esp_avrc_ct_send_metadata_cmd(bt_avrc_common_alloc_tl(), ESP_AVRC_MD_ATTR_TITLE);
+    esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_PLAY_POS_CHANGED, 0);
+}
+
+void bt_avrc_md_ct_evt_hdl_int(uint16_t event, void *param)
+{
+    esp_avrc_ct_cb_param_t *rc = (esp_avrc_ct_cb_param_t *)(param);
+
+    switch (event) {
+        case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
+            uint8_t *bda = rc->conn_stat.remote_bda;
+            ESP_LOGI(BT_RC_CT_TAG, "AVRC conn_state event: state %d, [%02x:%02x:%02x:%02x:%02x:%02x]",
+                    rc->conn_stat.connected, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+            break;
+        }
+
+        case ESP_AVRC_CT_METADATA_RSP_EVT: {
+            if (rc->meta_rsp.attr_text) {
+                ESP_LOGI(BT_RC_CT_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
+            } else {
+                ESP_LOGE(BT_RC_CT_TAG, "AVRC metadata rsp: attr_text NULL");
+            }
+            break;
+        }
+
+        case ESP_AVRC_CT_CHANGE_NOTIFY_EVT: {
+            if (rc->change_ntf.event_id == ESP_AVRC_RN_TRACK_CHANGE) {
+                requestMetadata();
+            }else if(rc->change_ntf.event_id == ESP_AVRC_RN_PLAY_POS_CHANGED){
+                //ESP_LOGI(BT_RC_CT_TAG, "poschange");
+            }else if(rc->change_ntf.event_id == ESP_AVRC_RN_PLAY_STATUS_CHANGE){
+                sourcePlayState = rc->change_ntf.event_parameter.playback;
+                esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
+            }
+            break;
+        }
+
+        case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
+                requestMetadata();
+            break;
+        }
+    }
+}
+
 static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
 {
     ESP_LOGD(BT_RC_CT_TAG, "%s event: %d", __func__, event);
@@ -135,18 +186,29 @@ static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
         break;
     }
     case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
-        bt_avrc_md_ct_evt_hdl(event, param);
+        bt_avrc_md_ct_evt_hdl_int(event, param);
         if (rc->conn_stat.connected) {
             /* get remote supported event_ids of peer AVRCP Target */
             bt_avrc_common_ct_get_peer_rn_cap();
         } else {
-            /* clear peer notification capability record */
+            supportsAutoUpdate = false;
+            sourcePlayState = 0x2;
             bt_avrc_common_ct_set_peer_rn_cap(0);
+            restoreAutoUpdate();
         }
         break;
     }
     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT: {
-        bt_avrc_md_ct_evt_hdl(event, param);
+        bt_avrc_md_ct_evt_hdl_int(event, param);
+
+        if(rc->change_ntf.event_id == ESP_AVRC_RN_PLAY_POS_CHANGED){
+
+            pushTime(rc->change_ntf.event_parameter.play_pos);
+            bt_avrc_common_ct_rn_play_pos_changed();
+
+            break;
+        }
+
         bt_avrc_common_ct_notify_evt_handler(rc->change_ntf.event_id, &rc->change_ntf.event_parameter);
         break;
     }
@@ -157,11 +219,18 @@ static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
         bt_avrc_common_ct_rn_play_status_changed();
         bt_avrc_common_ct_rn_play_pos_changed();
 
-        bt_avrc_md_ct_evt_hdl(event, param);
+        bt_avrc_md_ct_evt_hdl_int(event, param);
+        
+        //Does source support auto update of the song position (Android) or we have to poll manually (iPhone)
+        supportsAutoUpdate = (1 << ESP_AVRC_RN_PLAY_POS_CHANGED) & rc->get_rn_caps_rsp.evt_set.bits;
+        
+        //Enable play state report
+        esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
+
         break;
     }
     case ESP_AVRC_CT_METADATA_RSP_EVT: {
-        bt_avrc_md_ct_evt_hdl(event, param);
+        bt_avrc_md_ct_evt_hdl_int(event, param);
         break;
     }
     default:
@@ -173,6 +242,9 @@ static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
 static void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
 {
     switch (event) {
+    case ESP_AVRC_CT_PLAY_STATUS_RSP_EVT:
+        pushTime(param->play_status_rsp.song_position);
+        break;
     case ESP_AVRC_CT_METADATA_RSP_EVT: {
         bt_app_work_dispatch(bt_app_avrc_ct_evt_hdl, event, param, sizeof(esp_avrc_ct_cb_param_t), bt_avrc_common_copy_metadata);
         break;
@@ -249,7 +321,14 @@ static void bt_av_hdl_stack_evt(uint16_t event, void *p_param)
 //Internal codec uses I2S but in wrong mode for our purposes 
 //so we will use another available I2S channel and direct data to it
 void init_i2s1_for_32bit_dac() {
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+    i2s_chan_config_t chan_cfg = {
+        .id = I2S_NUM_1,
+        .role = I2S_ROLE_MASTER,
+        .dma_desc_num = 8,
+        .dma_frame_num = 2048,
+        .auto_clear = true,
+    };
+
     chan_cfg.auto_clear = true;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &my_tx_chan, NULL));
 
@@ -315,9 +394,6 @@ void send_avrc_cmd(uint8_t cmd_id) {
 
     //Button pressed
     esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_PRESSED);
-    
-    //Debounce
-    vTaskDelay(50 / portTICK_PERIOD_MS);
 
     //Button released
     esp_avrc_ct_send_passthrough_cmd(0, cmd_id, ESP_AVRC_PT_CMD_STATE_RELEASED);
@@ -411,7 +487,7 @@ static void i2s_audio_tx_task(void *pvParameters)
     }
 
     while (1) {
-        uint8_t *data = (uint8_t *)xRingbufferReceive(s_a2d_ringbuf, &item_size, pdMS_TO_TICKS(20));
+        uint8_t *data = (uint8_t *)xRingbufferReceive(s_a2d_ringbuf, &item_size, pdMS_TO_TICKS(50));
 
         if (data != NULL) {
             if (my_tx_chan != NULL) {
@@ -440,8 +516,31 @@ static void i2s_audio_tx_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+//Seconds timer for track position pull request
+static void bt_player_tick_task(void *arg){
+    for(;;){
+
+        //Poll position only for playing and non auto reporting devices
+        if(isRemoteConnected() && sourcePlayState == 0x01 && !supportsAutoUpdate){
+            esp_avrc_ct_send_get_play_status_cmd(5);
+        }
+
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+//Auto connect saved device
+void autoConnectLastDevice(){
+    esp_bd_addr_t savedAddress;
+    if (loadDeviceAddr(savedAddress) == ESP_OK) esp_a2d_sink_connect(savedAddress);
+}
+
 void InitBTPlayer(void)
 {
+    //Disable Wi-Fi to lower power comsumption
+    esp_wifi_stop();
+    esp_wifi_deinit();
+
     s_a2d_ringbuf = xRingbufferCreate(RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF);
     if (s_a2d_ringbuf == NULL) {
         ESP_LOGE("APP", "Failed to init ringbuffer.");
@@ -475,4 +574,20 @@ void InitBTPlayer(void)
     ESP_LOGI(LOG_TAG_A2DP, "I2S task registered");
 
     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
+
+    //Set lower TX/RX power
+    esp_err_t err = esp_bredr_tx_power_set(ESP_PWR_LVL_N12, ESP_PWR_LVL_N3);
+    if (err == ESP_OK) {
+        ESP_LOGI("BT_POWER", "Lowered BT power.");
+    } else {
+        ESP_LOGE("BT_POWER", "Error: %d", err);
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    
+    //Auto connect to last used device
+    autoConnectLastDevice();
+
+    //Start position polling task
+    xTaskCreate(bt_player_tick_task, "bt_player_tick", 2048, NULL, 5, NULL);
 }

@@ -52,6 +52,27 @@ void SendTime(){
     ComposeResponse((uint8_t[]){MEDIA_TIME_STATUS, currentSecond, currentMinute, 1, currentTrack, 1}, 6);
 }
 
+void restoreAutoUpdate(){
+    if(activePState == PSTATE_PLAY) enableTicker = true;
+}
+
+//Send real track time from bluetooth side
+void pushTime(uint32_t value){
+    
+    //Disable auto update timer, we have areal deal now
+    enableTicker = false;
+
+    value /= 1000;
+
+    //Clip maximum time to 99 minutes and 59 seconds
+    if(value > 5999) value = 5999;
+
+    currentMinute = value / 60;
+    currentSecond = value % 60;
+
+    SendTime();
+}
+
 //Waking up from standby
 //Booting warm sends a couple of status messages
 //before head unit even asks for anything
@@ -93,6 +114,7 @@ void CdInResponse() {
 }
 
 void CdEjectResponse() {
+    enableTicker = false;
     ComposeResponse((uint8_t[]){CD_STATUS_RES, HU_HEADER_EJECT}, 2);
 
     if(discInserted){
@@ -382,13 +404,10 @@ static void buscom_tick_task(void *arg){
         if(enableTicker){
             SendTime();
 
-            //Will force auto connect to stored device on 5th second
-            if(currentSecond == 0x05) dispatchCMD(PLAYER_CMD_ACTIVE);
-
             if(currentSecond < 59) currentSecond++;
             else{
                 currentSecond = 0;
-                if(currentMinute < 59) currentMinute++;
+                if(currentMinute < 99) currentMinute++;
                 else currentMinute = 0;
             };
         }

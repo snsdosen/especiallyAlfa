@@ -23,12 +23,14 @@
 #include "avrcp_metadata_utils.h"
 #include "driver/i2s_std.h"
 #include "esp_timer.h"
+#include "esp_bt.h"
+#include "esp_wifi.h"
 
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "buscom.h"
 
-#define COOLDOWN_TIME_US (5000000LL)
+#define COOLDOWN_TIME_US (10000000LL)
 
 #define LOG_TAG_A2DP  "A2DP/AVRCP"
 

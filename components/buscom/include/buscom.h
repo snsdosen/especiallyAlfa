@@ -77,5 +77,7 @@
     void InitBuscom(void);
     void RegisterCommandHandler(QueueHandle_t qHandle);
     void dispatchCMD(char playerCommand);
+    void pushTime(uint32_t value);
+    void restoreAutoUpdate();
 
 #endif
