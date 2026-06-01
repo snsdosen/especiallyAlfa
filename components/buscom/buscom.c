@@ -16,6 +16,8 @@ static TaskHandle_t buscom_tick_task_hdl = NULL;
 static bool enableTicker = false;       //Status report progress
 static bool discInserted = true;        //Emulated media status
 static bool insertingSequence = false;  //Media insertion is in progress
+static bool inSeek = false;             //Is song seek in progress
+static bool allowTimePush = false;      //Is bt time sync allowed
 
 static uint8_t currentMinute = 0;
 static uint8_t currentSecond = 0;
@@ -58,8 +60,10 @@ void restoreAutoUpdate(){
 
 //Send real track time from bluetooth side
 void pushTime(uint32_t value){
-    
-    //Disable auto update timer, we have areal deal now
+    //Do not push messages on the bus if the module is not playing or in seek
+    if(activePState == PSTATE_PAUSE || inSeek) return;
+
+    //Disable auto update timer, we have a real deal now
     enableTicker = false;
 
     value /= 1000;
@@ -170,7 +174,7 @@ void ExModuleStatusResponse(){
 void CdReadyResponse(){
     ComposeResponse((uint8_t[]){0xE2, 0x03, 0x79}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    ComposeResponse((uint8_t[]){0x15, 0x00, 0x00, 0x01, currentTrack, 0x01}, 6);
+    SendTime();
 }
 
 //Send AVRCP forward or backward on track change
@@ -216,19 +220,27 @@ void sync_tracks_with_radio(int current_track, int target_track) {
 void SeekToResponse(uint8_t trackNum){
     uint8_t cTrack = currentTrack;
 
+    inSeek = true;
+    allowTimePush = false;
     enableTicker = false;
+
     currentTrack = trackNum;
-    ResetTime();
+
     ComposeResponse((uint8_t[]){0xE3, 0x01, trackNum, 0x32}, 4);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ComposeResponse((uint8_t[]){0x72, 0x07, 0x12}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ComposeResponse((uint8_t[]){0x15, 0x00, 0x00, 0x00, trackNum, 0x00}, 6);
     sync_tracks_with_radio(cTrack, trackNum);
-    vTaskDelay(20 / portTICK_PERIOD_MS);        //Fake seek delay
+    vTaskDelay(200 / portTICK_PERIOD_MS);        //Fake seek delay
     ComposeResponse((uint8_t[]){0x72, 0x07, 0x32}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    ComposeResponse((uint8_t[]){0x15, 0x00, 0x00, 0x01, trackNum, 0x01}, 6);
+
+    ResetTime();
+
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+
+    inSeek = false;
     enableTicker = true;
 }
 
@@ -331,6 +343,7 @@ static void buscom_rx_task(void *arg){
                                 ESP_LOGI(LOG_TAG_BUSCOM, "MODULE INACTIVE");
                                 ModuleInactiveResponse();
                                 dispatchCMD(PLAYER_CMD_PAUSE);
+                                activePState = PSTATE_PAUSE;
                                 break;
                             }
                     }
@@ -401,7 +414,9 @@ static void buscom_tick_task(void *arg){
     for(;;){
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-        if(enableTicker){
+        //if(!allowTimePush && currentSecond > 2) allowTimePush = true;
+
+        if(enableTicker && activePState == PSTATE_PLAY && !inSeek){
             SendTime();
 
             if(currentSecond < 59) currentSecond++;

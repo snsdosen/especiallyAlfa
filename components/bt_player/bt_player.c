@@ -324,8 +324,8 @@ void init_i2s1_for_32bit_dac() {
     i2s_chan_config_t chan_cfg = {
         .id = I2S_NUM_1,
         .role = I2S_ROLE_MASTER,
-        .dma_desc_num = 8,
-        .dma_frame_num = 2048,
+        .dma_desc_num = 12,
+        .dma_frame_num = 480,
         .auto_clear = true,
     };
 
@@ -447,6 +447,7 @@ static void command_task(void *pvParameters){
                     break;
 
                 case PLAYER_CMD_REP:
+                    send_avrc_cmd(ESP_AVRC_PT_CMD_BACKWARD);
                     break;
 
                 case PLAYER_CMD_EJECT:
@@ -570,7 +571,7 @@ void InitBTPlayer(void)
     bt_app_task_start_up();
     init_i2s1_for_32bit_dac();
 
-    xTaskCreate(i2s_audio_tx_task, "i2s_tx_task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    xTaskCreate(i2s_audio_tx_task, "i2s_tx_task", 2048, NULL, configMAX_PRIORITIES - 3, NULL);
     ESP_LOGI(LOG_TAG_A2DP, "I2S task registered");
 
     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);

@@ -29,8 +29,8 @@ on the fast audio transport lines which greatly simplifies implementation.
 * VCC 9V is switched off in standby but stays hot after ACC is off
 for a couple of seconds, enough to put original CD module in standby.
 
-* CPU is downclocked to 80 Mhz (from default 160) and one core is disabled to
-lower power consumption without losing performance of functionality
+* CPU is downclocked to 80 Mhz (from default 160) to lower power consumption
+so we can use %V provided by the head unit's voltage regulator.
 
 ## What is implemented:
 * CD emulator on the data bus, head unit unlocks and uses CD mode
