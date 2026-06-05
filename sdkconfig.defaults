@@ -1,8 +1,14 @@
-# Override some defaults so BT stack is enabled and
-# Classic BT is enabled and BT_DRAM_RELEASE is disabled
+# This file was generated using idf.py save-defconfig. It can be edited manually.
+# Espressif IoT Development Framework (ESP-IDF) 6.0.0 Project Minimal Configuration
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_EXAMPLE_I2S_LRCK_PIN=-1
+CONFIG_EXAMPLE_I2S_BCK_PIN=-1
+CONFIG_EXAMPLE_I2S_DATA_PIN=-1
 CONFIG_BT_ENABLED=y
-CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y
-CONFIG_BT_BLUEDROID_ENABLED=y
 CONFIG_BT_CLASSIC_ENABLED=y
 CONFIG_BT_A2DP_ENABLE=y
+CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y
 CONFIG_DAC_DMA_AUTO_16BIT_ALIGN=n
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_80=y

@@ -1,7 +1,7 @@
-menu "A2DP Example Configuration"
+menu "A2DP Configuration"
     config EXAMPLE_LOCAL_DEVICE_NAME
         string "Local Device Name"
-        default "ESP_SPEAKER"
+        default "especiallyAlfa"
         help
             Use this option to set local device name.
 
