@@ -1,3 +1,58 @@
+menu "MediaDev build configuration"
+
+config MD_MODEL
+  string "MediaDev model indicator"
+  help
+    Model identifier of the module
+
+config MD_HARDWARE_REVISION
+  hex "Hardware revision"
+  range 0x0 0x99
+  default 0x10
+  help
+    Hardware revision of the module
+
+config MD_FIRMWARE_VERSION
+  hex "Firmware version"
+  range 0x0 0x99
+  default 0x10
+  help
+    Firmware version of the module
+
+config MD_BUILD_NUMBER
+  int "Build number"
+  range 0 65535
+  default 1
+  help
+    Firmware build number
+
+config DEBUG_SIGNATURE
+  bool "Flag as debug build"
+  help
+    Mark as debug version of the application
+
+config BUS_LISTEN_MODE
+  bool "Bus listen mode, don't reply"
+  help
+    Only listen on a radio bus, don't reply
+
+config SHOW_BUS_DEBUG
+  bool "Print radio bus messages"
+  help
+    Show radio bus messages in console
+
+config SHOW_TEXTCOM_DEBUG
+  bool "Print radio text bus messages"
+  help
+    Show radio text bus messages in console
+
+config DISABLE_PWRMGR
+  bool "Disable power manager deep sleep"
+  help
+    Disable deep sleep when it's not desired to have it running
+    
+endmenu
+
 menu "A2DP Configuration"
     config EXAMPLE_LOCAL_DEVICE_NAME
         string "Local Device Name"

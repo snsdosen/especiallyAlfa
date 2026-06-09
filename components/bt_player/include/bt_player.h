@@ -29,6 +29,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "buscom.h"
+#include "bt_spp.h"
 
 #define COOLDOWN_TIME_US (10000000LL)
 
@@ -40,7 +41,7 @@
 
 #define RINGBUF_SIZE (32 * 1024)
 
-void InitBTPlayer(void);
+void InitBluetooth(void);
 
 void saveDeviceAddr(esp_bd_addr_t bda);
 esp_err_t loadDeviceAddr(esp_bd_addr_t bda);

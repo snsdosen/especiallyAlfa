@@ -39,10 +39,10 @@ so we can use %V provided by the head unit's voltage regulator.
 * Enter deep sleep on standby to conserve car battery.
 * Remember last connected device and auto connect on startup
 * Display time sync with phone playing the music.
+* Bluetooth firmware update via Android companion app (will be released soon)
 
 ## Things yet to be implemented:
-* Title metadata support. ESP32 receives it and outputs it to a debug console only.
-* Bluetooth firmware update
+* Title metadata support. ESP32 receives it and outputs it to a debug console at the moment.
 
 ## Requirements:
 * Dev board with ESP-WROOM-32 module.

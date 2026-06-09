@@ -9,10 +9,12 @@
 #include "buscom.h"
 #include "textcom.h"
 #include "bt_player.h"
+#include "bt_app_spp.h"
 
 void app_main(void)
 {
+    initOTA();
     InitBuscom();
     //InitTextcom();
-    InitBTPlayer();
+    InitBluetooth();
 }

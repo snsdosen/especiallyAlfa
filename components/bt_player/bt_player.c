@@ -536,7 +536,7 @@ void autoConnectLastDevice(){
     if (loadDeviceAddr(savedAddress) == ESP_OK) esp_a2d_sink_connect(savedAddress);
 }
 
-void InitBTPlayer(void)
+void InitBluetooth(void)
 {
     //Disable Wi-Fi to lower power comsumption
     esp_wifi_stop();
@@ -563,10 +563,16 @@ void InitBTPlayer(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    //Free extra memory reserved for BLE which we will not use
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
+
     xTaskCreate(command_task, "cmd_handler_task", 2048, NULL, 10, NULL);
     ESP_LOGI(LOG_TAG_A2DP, "Command task registered");
 
     ESP_ERROR_CHECK(bredr_app_common_init());
+
+    //Init SPP profile for Android companion APP (OTA)
+    initSPP();
 
     bt_app_task_start_up();
     init_i2s1_for_32bit_dac();
