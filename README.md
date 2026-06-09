@@ -49,6 +49,9 @@ so we can use %V provided by the head unit's voltage regulator.
 * 2 way level shifter for TX/RX UART lines
 * VS Code with ESP-IDF to compile the code.
 
+## How to flash:
+* Download full_version-X.X from releases and flash it to 0x0 using [ESP Tool](https://espressif.github.io/esptool-js/)
+
 Connections:
 
 | Head unit | ESP pin      |
