@@ -30,7 +30,7 @@ on the fast audio transport lines which greatly simplifies implementation.
 for a couple of seconds, enough to put original CD module in standby.
 
 * CPU is downclocked to 80 Mhz (from default 160) to lower power consumption
-so we can use %V provided by the head unit's voltage regulator.
+so we can use 5V provided by the head unit's voltage regulator.
 
 ## What is implemented:
 * CD emulator on the data bus, head unit unlocks and uses CD mode
@@ -39,7 +39,7 @@ so we can use %V provided by the head unit's voltage regulator.
 * Enter deep sleep on standby to conserve car battery.
 * Remember last connected device and auto connect on startup
 * Display time sync with phone playing the music.
-* Bluetooth firmware update via Android companion app (will be released soon)
+* Bluetooth firmware update via Android companion app [MDCompanion](https://github.com/snsdosen/MDCompanion)
 
 ## Things yet to be implemented:
 * Title metadata support. ESP32 receives it and outputs it to a debug console at the moment.
@@ -51,6 +51,10 @@ so we can use %V provided by the head unit's voltage regulator.
 
 ## How to flash:
 * Download full_version-X.X from releases and flash it to 0x0 using [ESP Tool](https://espressif.github.io/esptool-js/)
+
+## How to update:
+1. Flash the latest full_version-X.X via USB
+2. OTA (Over-The-Air) update via Bluetooth using [MDCompanion](https://github.com/snsdosen/MDCompanion)
 
 Connections:
 
