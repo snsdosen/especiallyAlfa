@@ -41,7 +41,7 @@
 #define MD_IDENTIFIER   "MediaDev"
 #define MD_MODEL        CONFIG_MD_MODEL
 #define MD_REVISION     CONFIG_MD_HARDWARE_REVISION
-#define MD_FIRMWARE     CONFIG_MD_FIRMWARE_VERSION
+#define MD_FIRMWARE     0x3//CONFIG_MD_FIRMWARE_VERSION
 #define MD_PROTOCOL     0x12
 
 #define MD_RESPONSE_ERROR           "E"   //Undefined error

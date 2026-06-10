@@ -1,7 +1,8 @@
 {
-    "version":"16",
+    "version":"17",
     "debugBuild":"16",
-    "size":"1121904",
-    "releases":["16"],
+    "size":"1122944",
+    "releases":["16", "17"],
+    "version-1.1": ["Disable audio streaming during OTA firmware update", "Restore last active state after OTA reboot"],
     "version-1.0": ["Initial release"]
 }
