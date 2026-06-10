@@ -1,3 +1,3 @@
 idf_component_register(SRCS "bt_spp.c" "bt_app_spp.c"
-                    PRIV_REQUIRES bt nvs_flash app_update spi_flash crc32
+                    PRIV_REQUIRES bt nvs_flash app_update spi_flash crc32 bt_player
                     INCLUDE_DIRS "include")

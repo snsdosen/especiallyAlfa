@@ -126,6 +126,14 @@ static void bt_app_a2d_data_cb(const uint8_t *data, uint32_t len)
     xRingbufferSend(s_a2d_ringbuf, (void *)data, len, 0);
 }
 
+//Disconnect currently connected target
+void disconnectTarget(){
+  ESP_LOGI("bluetooth", "Target should disconnect");
+  if(isRemoteConnected()){
+    esp_a2d_sink_disconnect(connected_bda);
+  }
+}
+
 //Request audio metadata from remote device
 void requestMetadata(){
     esp_avrc_ct_send_metadata_cmd(bt_avrc_common_alloc_tl(), ESP_AVRC_MD_ATTR_TITLE);

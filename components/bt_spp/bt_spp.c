@@ -42,7 +42,7 @@ static char *bda2str(uint8_t * bda, char *str, size_t size)
 
 static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 {
-    char bda_str[18] = {0};
+    //char bda_str[18] = {0};
 
     switch (event) {
     case ESP_SPP_INIT_EVT:

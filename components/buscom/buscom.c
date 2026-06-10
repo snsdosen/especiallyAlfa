@@ -13,7 +13,7 @@ static TaskHandle_t buscom_rx_task_hdl = NULL;
 static TaskHandle_t buscom_tx_task_hdl = NULL;
 static TaskHandle_t buscom_tick_task_hdl = NULL;
 
-static bool enableTicker = false;       //Status report progress
+RTC_DATA_ATTR static bool enableTicker = false;       //Status report progress
 static bool discInserted = true;        //Emulated media status
 static bool insertingSequence = false;  //Media insertion is in progress
 static bool inSeek = false;             //Is song seek in progress
@@ -22,7 +22,7 @@ static bool allowTimePush = false;      //Is bt time sync allowed
 static uint8_t currentMinute = 0;
 static uint8_t currentSecond = 0;
 static uint8_t currentTrack = 1;
-static uint8_t activePState = PSTATE_PAUSE;
+RTC_DATA_ATTR static uint8_t activePState = PSTATE_PAUSE;
 
 //Ringbuffer for data transmission
 RingbufHandle_t dataRingbuf;
@@ -81,6 +81,15 @@ void pushTime(uint32_t value){
 //Booting warm sends a couple of status messages
 //before head unit even asks for anything
 void WarmBoot(){
+
+    esp_reset_reason_t reason = esp_reset_reason();
+
+    //Check if ESP was soft reset, no need for warm boot if so
+    if(reason == ESP_RST_SW){
+        ESP_LOGW("buscom", "From update");
+        return;
+    }
+
     if(discInserted) ComposeResponse((uint8_t[]){0x72, 0x5, 0x70}, 3);
     else ComposeResponse((uint8_t[]){0x72, 0x00, 0x60}, 3);
     vTaskDelay(80 / portTICK_PERIOD_MS);

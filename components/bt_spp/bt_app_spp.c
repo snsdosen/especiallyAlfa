@@ -21,6 +21,7 @@
 #include "spi_flash_mmap.h"
 #include "crc32.h"
 #include "esp_flash_encrypt.h"
+#include "bt_player.h"
 
 //If this is a debug build it will contain debug flag in firmware signature
 #define MD_RELEASE_SIGNATURE  0x0
@@ -58,9 +59,9 @@
 #define MD_CMD_VERIFY       'F'
 #define MD_CMD_REBOOT       'R'
 #define MD_CMD_PARTITION    'U'
-#define MD_CMD_NOTIFICATION 'N'     //Added in firmware 1.1, protocol 1.1
-#define MD_CMD_REGISTER_EVT 'J'     //Added in firmware 1.1, protocol 1.1
-#define MD_CMD_EVENT        'L'     //Added in firmware 1.1, protocol 1.1
+#define MD_CMD_NOTIFICATION 'N'     //Added in protocol 1.1
+#define MD_CMD_REGISTER_EVT 'J'     //Added in protocol 1.1
+#define MD_CMD_EVENT        'L'     //Added in protocol 1.1
 
 uint8_t activeEvents = 0x0;
 
@@ -134,7 +135,7 @@ void validImageCheck(uint32_t write_handle, uint8_t *encrypted_cache, uint32_t d
   }
 
   //Disable A2DP sink so it doesn't interfere with the flashing process
-  //disconnectTarget();
+  disconnectTarget();
 
   //Write went OK
   app_spp_send_string(MD_CMD_WRITE, MD_RESPONSE_OK, write_handle);

@@ -45,5 +45,7 @@ void InitBluetooth(void);
 
 void saveDeviceAddr(esp_bd_addr_t bda);
 esp_err_t loadDeviceAddr(esp_bd_addr_t bda);
+bool isRemoteConnected();
+void disconnectTarget();
 
 #endif
