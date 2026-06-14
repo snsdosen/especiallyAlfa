@@ -1,8 +1,46 @@
 dependencies:
+  a2dp_sink_common_utils:
+    dependencies: []
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\a2dp_utils\a2dp_sink_common_utils
+      type: local
+    version: '*'
+  a2dp_sink_ext_codec_utils:
+    dependencies: []
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\a2dp_utils\a2dp_sink_ext_codec_utils
+      type: local
+    version: '*'
+  a2dp_sink_int_codec_utils:
+    dependencies: []
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\a2dp_utils\a2dp_sink_int_codec_utils
+      type: local
+    version: '*'
   avrcp_common_utils:
     dependencies: []
     source:
       path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\avrcp_utils\avrcp_common_utils
+      type: local
+    version: '*'
+  avrcp_metadata_utils:
+    dependencies:
+    - name: avrcp_common_utils
+      path: ${IDF_PATH}/examples/bluetooth/bluedroid/classic_bt/common/avrcp_utils/avrcp_common_utils
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\avrcp_utils\avrcp_metadata_utils
+      type: local
+    version: '*'
+  bredr_app_common_utils:
+    dependencies: []
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\bredr_app_common_utils
+      type: local
+    version: '*'
+  bt_app_core_utils:
+    dependencies: []
+    source:
+      path: ..\..\..\..\esp\v6.0\esp-idf\examples\bluetooth\bluedroid\classic_bt\common\bt_app_core_utils
       type: local
     version: '*'
   idf:
@@ -10,7 +48,13 @@ dependencies:
       type: idf
     version: 6.0.0
 direct_dependencies:
+- a2dp_sink_common_utils
+- a2dp_sink_ext_codec_utils
+- a2dp_sink_int_codec_utils
 - avrcp_common_utils
-manifest_hash: 49272f4ad0ad6d2a3a140aad5ac715f47984705ae4bfec87194196b0b7862eda
+- avrcp_metadata_utils
+- bredr_app_common_utils
+- bt_app_core_utils
+manifest_hash: 6be3312c6866b919d2f7f016863dd635d3de26dd27d6443b49c9ade7ec52f362
 target: esp32
 version: 3.0.0
