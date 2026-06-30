@@ -15,6 +15,7 @@
 
     //Head unit command headers
     #define HU_HEADER_ACTIVITY      0x09    //Module activity
+    #define HU_HEADER_KTKM          0x10    //Koji...
     #define HU_HEADER_EJECT         0x18    //Eject command
     #define HU_HEADER_PSTATE        0x23    //Play state commands
     #define HU_HEADER_SEEK          0x32    //Seeking commands

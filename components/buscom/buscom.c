@@ -13,7 +13,7 @@ static TaskHandle_t buscom_rx_task_hdl = NULL;
 static TaskHandle_t buscom_tx_task_hdl = NULL;
 static TaskHandle_t buscom_tick_task_hdl = NULL;
 
-RTC_DATA_ATTR static bool enableTicker = false;       //Status report progress
+static bool enableTicker = false;       //Status report progress
 static bool discInserted = true;        //Emulated media status
 static bool insertingSequence = false;  //Media insertion is in progress
 static bool inSeek = false;             //Is song seek in progress
@@ -22,7 +22,7 @@ static bool allowTimePush = false;      //Is bt time sync allowed
 static uint8_t currentMinute = 0;
 static uint8_t currentSecond = 0;
 static uint8_t currentTrack = 1;
-RTC_DATA_ATTR static uint8_t activePState = PSTATE_PAUSE;
+static uint8_t activePState = PSTATE_PAUSE;
 
 //Ringbuffer for data transmission
 RingbufHandle_t dataRingbuf;
@@ -47,6 +47,7 @@ void ResetTime(){
 static void ComposeResponse(uint8_t *message, size_t len) {
     ESP_LOG_BUFFER_HEX(LOG_TAG_BUSCOM, message, len);
     xRingbufferSend(dataRingbuf, message, len, pdMS_TO_TICKS(100));
+    uart_wait_tx_done(UART_NUM_1, 20 / portTICK_PERIOD_MS);
 }
 
 //Send current time on the bus
@@ -131,6 +132,7 @@ void CdEjectResponse() {
     ComposeResponse((uint8_t[]){CD_STATUS_RES, HU_HEADER_EJECT}, 2);
 
     if(discInserted){
+        vTaskDelay(20 / portTICK_PERIOD_MS);
         ComposeResponse((uint8_t[]){0x72, 0x00, 0x62}, 3);
         vTaskDelay(20 / portTICK_PERIOD_MS);
         ComposeResponse((uint8_t[]){0x72, 0x00, 0x6C}, 3);
@@ -184,6 +186,12 @@ void CdReadyResponse(){
     ComposeResponse((uint8_t[]){0xE2, 0x03, 0x79}, 3);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     SendTime();
+}
+
+void KTKMResponse(){
+    ComposeResponse((uint8_t[]){0xE1, 0x10}, 2);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    ComposeResponse((uint8_t[]){0x72, 0x05, 0x72}, 3);
 }
 
 //Send AVRCP forward or backward on track change
@@ -253,18 +261,21 @@ void SeekToResponse(uint8_t trackNum){
     enableTicker = true;
 }
 
+bool firstStateRes = false;
+
 //Acknowledge play status changes from the head unit
-void PStateResponse(uint8_t state){
-    ComposeResponse((uint8_t[]){CD_PSTATE_RES, 8, 0, state, 0x23}, 5);
+void PStateResponse(uint8_t cm0, uint8_t cm1, uint8_t state){
+    ComposeResponse((uint8_t[]){CD_PSTATE_RES, cm0, cm1, state, 0x23}, 5);
     activePState = state;
 
     if(state == PSTATE_PAUSE) enableTicker = false;
 
-    if(state == PSTATE_PLAY){
-        ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
-        vTaskDelay(20 / portTICK_PERIOD_MS);    //Fake seek time
+    if(state == PSTATE_PLAY && !firstStateRes){
         ComposeResponse((uint8_t[]){0x72, 0x07, 0x32}, 3);
+        vTaskDelay(20 / portTICK_PERIOD_MS);    //Fake seek time
+        ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
         enableTicker = true;
+        firstStateRes = true;
     }
 }
 
@@ -277,12 +288,14 @@ static void buscom_rx_task(void *arg){
     //Do the deed
     while(true){
 
+        vTaskDelay(1);
+
         //Data from Headunit
         uart_get_buffered_data_len(UART_NUM_1, &inBuffer);
         if(inBuffer > 0){
 
             //Read only header of the message
-            length = uart_read_bytes(UART_NUM_1, data, 1, 3 / portTICK_PERIOD_MS);
+            length = uart_read_bytes(UART_NUM_1, data, 1, 1 / portTICK_PERIOD_MS);
 
             ESP_LOGI(LOG_TAG_BUSCOM, "HU HEADER: %X", data[0]);
 
@@ -306,29 +319,40 @@ static void buscom_rx_task(void *arg){
 
                 case HU_MODULE_STATUS:
                     length = uart_read_bytes(UART_NUM_1, data, 1, 3 / portTICK_PERIOD_MS);
-                    ESP_LOGI(LOG_TAG_BUSCOM, "MODULE STATUS");
+                    //ESP_LOGI(LOG_TAG_BUSCOM, "MODULE STATUS");
+                    vTaskDelay(2 / portTICK_PERIOD_MS);
                     ExModuleStatusResponse();
                     break;
 
+                case HU_HEADER_KTKM:
+                    //ESP_LOGI(LOG_TAG_BUSCOM, "KTKM");
+                    vTaskDelay(2 / portTICK_PERIOD_MS);
+                    KTKMResponse();
+                    break;
+
                 case HU_POWER_ON:
-                    ESP_LOGI(LOG_TAG_BUSCOM, "POWER ON");
+                    //ESP_LOGI(LOG_TAG_BUSCOM, "POWER ON");
+                    vTaskDelay(2 / portTICK_PERIOD_MS);
                     PowerOnResponse();
                     break;
 
                 case HU_HEADER_CD_INSERTED:
-                    ESP_LOGI(LOG_TAG_BUSCOM, "IS CD IN?");
+                    //ESP_LOGI(LOG_TAG_BUSCOM, "IS CD IN?");
+                    vTaskDelay(2 / portTICK_PERIOD_MS);
                     CdInResponse();
                     break;
 
                 case HU_READY_REQUEST:
                     if(HU_READY_LEN == uart_read_bytes(UART_NUM_1, data, HU_ACTIVITY_LEN, 3 / portTICK_PERIOD_MS)){
-                        ESP_LOGI(LOG_TAG_BUSCOM, "ARE YOU READY?");
+                        //ESP_LOGI(LOG_TAG_BUSCOM, "ARE YOU READY?");
+                        vTaskDelay(2 / portTICK_PERIOD_MS);
                         CdReadyResponse();
                     }
                     break;
 
                 case HU_HEADER_EJECT:
-                    ESP_LOGI(LOG_TAG_BUSCOM, "EJECT");
+                    //ESP_LOGI(LOG_TAG_BUSCOM, "EJECT");
+                    vTaskDelay(2 / portTICK_PERIOD_MS);
                     dispatchCMD(PLAYER_CMD_EJECT);
                     CdEjectResponse();
                     break;
@@ -339,17 +363,21 @@ static void buscom_rx_task(void *arg){
                     if(length == HU_ACTIVITY_LEN){
                         switch(data[0]){
                             case MODULE_ACTIVE:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "MODULE ACTIVE");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "MODULE ACTIVE");
+                                vTaskDelay(2 / portTICK_PERIOD_MS);
+                                ModuleActiveResponse();
                                 dispatchCMD(PLAYER_CMD_ACTIVE);
                                 break;
 
                             case MODULE_STANDBY:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "MODULE STANDBY");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "MODULE STANDBY");
+                                vTaskDelay(2 / portTICK_PERIOD_MS);
                                 ModuleStandbyResponse();
                                 break;
 
                             case MODULE_INACTIVE:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "MODULE INACTIVE");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "MODULE INACTIVE");
+                                vTaskDelay(2 / portTICK_PERIOD_MS);
                                 ModuleInactiveResponse();
                                 dispatchCMD(PLAYER_CMD_PAUSE);
                                 activePState = PSTATE_PAUSE;
@@ -364,28 +392,30 @@ static void buscom_rx_task(void *arg){
                     if(length == HU_PSTATE_LEN){
                         switch(data[2]){
                             case PSTATE_PLAY:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PLAY");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PLAY");
                                 dispatchCMD(PLAYER_CMD_PLAY);
                                 break;
 
                             case PSTATE_PAUSE:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PAUSE");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: PAUSE");
                                 dispatchCMD(PLAYER_CMD_PAUSE);
                                 break;
 
                             case PSTATE_REW:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: REWIND");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: REWIND");
                                 dispatchCMD(PLAYER_CMD_REW);
                                 break;
 
                             case PSTATE_FF:
-                                ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: FAST FORWARD");
+                                //ESP_LOGI(LOG_TAG_BUSCOM, "PSTATE: FAST FORWARD");
                                 dispatchCMD(PLAYER_CMD_FF);
                                 break;
                         }
 
+                        vTaskDelay(2 / portTICK_PERIOD_MS);
+
                         //Send ack response to head unit
-                        PStateResponse(data[2]);
+                        PStateResponse(data[0], data[1], data[2]);
                     }
 
                     break;
@@ -401,7 +431,7 @@ static void buscom_rx_task(void *arg){
             }
         }
 
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 }
 
