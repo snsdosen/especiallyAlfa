@@ -243,6 +243,7 @@ void SeekToResponse(uint8_t trackNum){
 
     currentTrack = trackNum;
 
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     ComposeResponse((uint8_t[]){0xE3, 0x01, trackNum, 0x32}, 4);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     ComposeResponse((uint8_t[]){0x72, 0x07, 0x12}, 3);
@@ -271,6 +272,7 @@ void PStateResponse(uint8_t cm0, uint8_t cm1, uint8_t state){
     if(state == PSTATE_PAUSE) enableTicker = false;
 
     if(state == PSTATE_PLAY && !firstStateRes){
+        vTaskDelay(10 / portTICK_PERIOD_MS);
         ComposeResponse((uint8_t[]){0x72, 0x07, 0x32}, 3);
         vTaskDelay(20 / portTICK_PERIOD_MS);    //Fake seek time
         ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
@@ -424,7 +426,7 @@ static void buscom_rx_task(void *arg){
                     length = uart_read_bytes(UART_NUM_1, data, HU_SEEK_LEN, 3 / portTICK_PERIOD_MS);
 
                     if(length == HU_SEEK_LEN){
-                        ESP_LOGI(LOG_TAG_BUSCOM, "SEEK TO: %d", data[1]);
+                        //ESP_LOGI(LOG_TAG_BUSCOM, "SEEK TO: %d", data[1]);
                         SeekToResponse(data[1]);
                     }
                     break;
