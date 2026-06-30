@@ -1,7 +1,7 @@
 {
     "version":"18",
     "debugBuild":"18",
-    "size":"1122944",
+    "size":"1122896",
     "releases":["16", "17", "18"],
     "version-1.2": ["Added support for Alfa 147 Head Unit"],
     "version-1.1": ["Disable audio streaming during OTA firmware update", "Restore last active state after OTA reboot"],
