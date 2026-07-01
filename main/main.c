@@ -13,8 +13,8 @@
 
 void app_main(void)
 {
-    initOTA();
     InitBuscom();
+    initOTA();
     //InitTextcom();
     InitBluetooth();
 }

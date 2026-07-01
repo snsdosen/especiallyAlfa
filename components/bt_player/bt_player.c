@@ -81,9 +81,12 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
             //Copy address to localy value
             memcpy(connected_bda, a2d->conn_stat.remote_bda, ESP_BD_ADDR_LEN);
             
-            ESP_LOGI(BT_AV_TAG, "Device connected: %02x:%02x:%02x:%02x:%02x:%02x",
+            /*ESP_LOGI(BT_AV_TAG, "Device connected: %02x:%02x:%02x:%02x:%02x:%02x",
                     connected_bda[0], connected_bda[1], connected_bda[2],
-                    connected_bda[3], connected_bda[4], connected_bda[5]);
+                    connected_bda[3], connected_bda[4], connected_bda[5]);*/
+
+            //Disable visibility, we only allow 1 device anyway and this will lower power consumption
+            esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
             esp_bd_addr_t savedAddress;
 
@@ -100,6 +103,9 @@ static void bt_app_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
         }else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
                 //Remove active connected device address
                 memset(connected_bda, 0, ESP_BD_ADDR_LEN);
+
+                //Make device discoverable again
+                esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
         }
 
         bt_app_work_dispatch(bt_a2d_evt_int_codec_hdl, event, param, sizeof(esp_a2d_cb_param_t), NULL);
@@ -579,6 +585,14 @@ void InitBluetooth(void)
 
     ESP_ERROR_CHECK(bredr_app_common_init());
 
+    //Set lower TX/RX power
+    esp_err_t err = esp_bredr_tx_power_set(ESP_PWR_LVL_N12, ESP_PWR_LVL_N12);
+    if (err == ESP_OK) {
+        ESP_LOGI("BT_POWER", "Lowered BT power.");
+    } else {
+        ESP_LOGE("BT_POWER", "Error: %d", err);
+    }
+
     //Init SPP profile for Android companion APP (OTA)
     initSPP();
 
@@ -589,14 +603,6 @@ void InitBluetooth(void)
     ESP_LOGI(LOG_TAG_A2DP, "I2S task registered");
 
     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
-
-    //Set lower TX/RX power
-    esp_err_t err = esp_bredr_tx_power_set(ESP_PWR_LVL_N12, ESP_PWR_LVL_N3);
-    if (err == ESP_OK) {
-        ESP_LOGI("BT_POWER", "Lowered BT power.");
-    } else {
-        ESP_LOGE("BT_POWER", "Error: %d", err);
-    }
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     
