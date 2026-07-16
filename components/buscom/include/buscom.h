@@ -25,6 +25,7 @@
     #define HU_MODULE_STATUS        0x51    //Extended module status
 
     //Head unit MSG length
+    #define HU_STATUS_LEN       1       //Module status
     #define HU_ACTIVITY_LEN     1       //Module activity
     #define HU_PSTATE_LEN       3       //Play state commands
     #define HU_SEEK_LEN         2       //Seeking commands
@@ -74,6 +75,9 @@
     #define PLAYER_CMD_CLR      10
     #define PLAYER_CMD_EJECT    11
     #define PLAYER_CMD_ACTIVE   12
+
+    #define BUSCOM_PAYLOAD_TIMEOUT_MS   8
+    #define BUSCOM_RESPONSE_DELAY_US    6000
 
     void InitBuscom(void);
     void RegisterCommandHandler(QueueHandle_t qHandle);

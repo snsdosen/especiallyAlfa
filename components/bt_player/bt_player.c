@@ -230,11 +230,14 @@ static void bt_app_avrc_ct_evt_hdl(uint16_t event, void *param)
         bt_avrc_md_ct_evt_hdl_int(event, param);
         
         //Does source support auto update of the song position (Android) or we have to poll manually (iPhone)
-        supportsAutoUpdate = (1 << ESP_AVRC_RN_PLAY_POS_CHANGED) & rc->get_rn_caps_rsp.evt_set.bits;
+        //supportsAutoUpdate = (1 << ESP_AVRC_RN_PLAY_POS_CHANGED) & rc->get_rn_caps_rsp.evt_set.bits;
         
-        //Enable play state report
-        esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
+        //Apparently some Android phones are a little lazy to send status update every second
+        //so we are going to lie and say that they do not support auto update and poll instead.
+        supportsAutoUpdate = false;
 
+        //Enable play state report
+        //esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_PLAY_STATUS_CHANGE, 0);
         break;
     }
     case ESP_AVRC_CT_METADATA_RSP_EVT: {
