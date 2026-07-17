@@ -38,6 +38,7 @@
 
     //Play states
     #define PSTATE_PLAY         0x00    //Play
+    #define PSTATE_TF           0x04    //TF?
     #define PSTATE_PAUSE        0x05    //Pause
     #define PSTATE_REW          0xE0    //Rewind
     #define PSTATE_FF           0x60    //Fast forward

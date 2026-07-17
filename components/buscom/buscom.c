@@ -293,11 +293,22 @@ void PStateResponse(uint8_t cm0, uint8_t cm1, uint8_t state){
 
     if(state == PSTATE_PAUSE) enableTicker = false;
 
-    if(state == PSTATE_PLAY && !firstStateRes){
+    else if(state == PSTATE_TF){
+        vTaskDelay(30 / portTICK_PERIOD_MS);
+        ComposeResponse((uint8_t[]){0x72, 0x07, 0x12}, 3);
+    }
+
+    else if(state == PSTATE_PLAY){
         vTaskDelay(20 / portTICK_PERIOD_MS);    //Fake seek time
-        ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
-        enableTicker = true;
-        firstStateRes = true;
+
+        //Don't send response first time around
+        if(!firstStateRes){
+            ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
+            enableTicker = true;
+
+        }else{
+            firstStateRes = true;
+        }
     }
 }
 
