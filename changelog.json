@@ -1,9 +1,8 @@
 {
-    "version":"19",
-    "debugBuild":"19",
-    "size":"1124000",
-    "releases":["16", "17", "18", "19"],
-    "version-1.3": ["Improved compatibility with Alfa 147/GT", "Switched to 1s polling for Android time sync"],
+    "version":"18",
+    "debugBuild":"18",
+    "size":"1122848",
+    "releases":["16", "17", "18"],
     "version-1.2": ["Added support for Alfa 147 Head Unit"],
     "version-1.1": ["Disable audio streaming during OTA firmware update", "Restore last active state after OTA reboot"],
     "version-1.0": ["Initial release"]
