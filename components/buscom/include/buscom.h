@@ -19,6 +19,7 @@
     #define HU_HEADER_EJECT         0x18    //Eject command
     #define HU_HEADER_PSTATE        0x23    //Play state commands
     #define HU_HEADER_SEEK          0x32    //Seeking commands
+    #define HU_HEADER_DESTROY       0x33    //Seek 'n destroy
     #define HU_HEADER_CD_INSERTED   0x70    //CD inserted status request
     #define HU_READY_REQUEST        0x79    //Are you ready request
     #define HU_POWER_ON             0x60    //Power available, but ignition might still be off
@@ -30,6 +31,7 @@
     #define HU_PSTATE_LEN       3       //Play state commands
     #define HU_SEEK_LEN         2       //Seeking commands
     #define HU_READY_LEN        1       //Ready request
+    #define HU_DESTROY_LEN      3       //Destroy request
 
     //Module activity
     #define MODULE_ACTIVE       0x2     //CD module active

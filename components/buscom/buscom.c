@@ -26,6 +26,9 @@ static uint8_t currentSecond = 0;
 static uint8_t currentTrack = 1;
 static uint8_t activePState = PSTATE_PAUSE;
 
+static bool KTKMhappened = false;
+static bool radioInitializationDone = false;
+
 QueueHandle_t uart_queue1;
 static QueueHandle_t commandQueueHandle = NULL;
 
@@ -42,6 +45,7 @@ void dispatchCMD(char playerCommand){
 void ResetTime(){
     currentMinute = 0;
     currentSecond = 0;
+    radioInitializationDone = false;
 }
 
 //Accurate byte read function to reduce latency
@@ -84,6 +88,18 @@ void restoreAutoUpdate(){
 
 //Send real track time from bluetooth side
 void pushTime(uint32_t value){
+    //Do not push for first 3 seconds
+    //147 freaks out if the time is not default
+    //from the boot
+    if (!radioInitializationDone) {
+
+        if (currentMinute > 0 || currentSecond >= 3) {
+            radioInitializationDone = true; 
+        } else {
+            return;
+        }
+    }
+
     value /= 1000;
     currentMinute = value / 60;
     currentSecond = value % 60;
@@ -123,7 +139,8 @@ void WarmBoot(){
 
     if(discInserted) ComposeResponse((uint8_t[]){0x72, 0x5, 0x70}, 3);
     else ComposeResponse((uint8_t[]){0x72, 0x00, 0x60}, 3);
-    vTaskDelay(80 / portTICK_PERIOD_MS);
+    esp_rom_delay_us(3000);
+    //vTaskDelay(80 / portTICK_PERIOD_MS);
 
     if(!discInserted){
         ComposeResponse((uint8_t[]){0x61, 0x01}, 2);
@@ -157,6 +174,8 @@ void CdInResponse() {
 
 void CdEjectResponse() {
     enableTicker = false;
+    ResetTime();
+    restoreAutoUpdate();
     ComposeResponse((uint8_t[]){CD_STATUS_RES, HU_HEADER_EJECT}, 2);
 
     if(discInserted){
@@ -181,6 +200,10 @@ void CdEjectResponse() {
 void ModuleActiveResponse(){
     ComposeResponse((uint8_t[]){0xE2, 0x02, 0x09}, 3);
     ComposeResponse((uint8_t[]){0x72, 0x05, 0x12}, 3);
+
+    //Alfa 147
+    //ComposeResponse((uint8_t[]){0x72, 0x00, 0x02}, 3);
+    //ComposeResponse((uint8_t[]){0x73, 0x3D, 0x03, 0x2}, 4);
 }
 
 void ModuleInactiveResponse(){
@@ -197,13 +220,22 @@ void ModuleStandbyResponse(){
 
 void PowerOnResponse(){
     ComposeResponse((uint8_t[]){0xE1, 0x60}, 2);
-    if(discInserted) ComposeResponse((uint8_t[]){0x72, 0x05, 0x72}, 3);
+    if(discInserted) {
+        if(activePState == PSTATE_PLAY) {
+            ComposeResponse((uint8_t[]){0x72, 0x07, 0x32}, 3);
+                enableTicker = true;
+        }
+        else ComposeResponse((uint8_t[]){0x72, 0x05, 0x72}, 3);
+    }
     else ComposeResponse((uint8_t[]){0x72, 0x00, 0x61}, 3);
 }
 
 void ExModuleStatusResponse(){
     ComposeResponse((uint8_t[]){0xE2, 0x01, 0x51}, 3);
     ComposeResponse((uint8_t[]){0x42, 0x04, 0x12}, 3);
+
+    //Alfa 147
+    //ComposeResponse((uint8_t[]){0x42, 0x03, 0x06}, 3);
 }
 
 void CdReadyResponse(){
@@ -212,6 +244,7 @@ void CdReadyResponse(){
 }
 
 void KTKMResponse(){
+    KTKMhappened = true;
     ComposeResponse((uint8_t[]){0xE1, 0x10}, 2);
     ComposeResponse((uint8_t[]){0x72, 0x05, 0x72}, 3);
 }
@@ -256,6 +289,10 @@ void sync_tracks_with_radio(int current_track, int target_track) {
     }
 }
 
+void DestroyResponse(uint8_t cm0, uint8_t cm1, uint8_t cm2){
+    ComposeResponse((uint8_t[]){0xE4, cm0, cm1, cm2, HU_HEADER_DESTROY}, 5);
+}
+
 void SeekToResponse(uint8_t trackNum){
     uint8_t cTrack = currentTrack;
 
@@ -284,8 +321,6 @@ void SeekToResponse(uint8_t trackNum){
     enableTicker = true;
 }
 
-bool firstStateRes = false;
-
 //Acknowledge play status changes from the head unit
 void PStateResponse(uint8_t cm0, uint8_t cm1, uint8_t state){
     ComposeResponse((uint8_t[]){CD_PSTATE_RES, cm0, cm1, state, 0x23}, 5);
@@ -294,21 +329,14 @@ void PStateResponse(uint8_t cm0, uint8_t cm1, uint8_t state){
     if(state == PSTATE_PAUSE) enableTicker = false;
 
     else if(state == PSTATE_TF){
-        vTaskDelay(30 / portTICK_PERIOD_MS);
+        esp_rom_delay_us(1000);
         ComposeResponse((uint8_t[]){0x72, 0x07, 0x12}, 3);
     }
 
     else if(state == PSTATE_PLAY){
-        vTaskDelay(20 / portTICK_PERIOD_MS);    //Fake seek time
-
-        //Don't send response first time around
-        if(!firstStateRes){
-            ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
-            enableTicker = true;
-
-        }else{
-            firstStateRes = true;
-        }
+        esp_rom_delay_us(1000);
+        ComposeResponse((uint8_t[]){0x72, 0x05, 0x32}, 3);
+        if(KTKMhappened) enableTicker = true;
     }
 }
 
@@ -382,13 +410,14 @@ static void buscom_rx_task(void *arg){
                                         break;
 
                                     case MODULE_STANDBY:
+                                        KTKMhappened = false;
                                         ModuleStandbyResponse();
                                         break;
 
                                     case MODULE_INACTIVE:
                                         ModuleInactiveResponse();
                                         dispatchCMD(PLAYER_CMD_PAUSE);
-                                        activePState = PSTATE_PAUSE;
+                                        //activePState = PSTATE_PAUSE;
                                         break;
                                 }
                             }
@@ -418,6 +447,15 @@ static void buscom_rx_task(void *arg){
 
                                 PStateResponse(data[0], data[1], data[2]);
                             }
+                            break;
+
+                        case HU_HEADER_DESTROY:
+                            length = uart_read_bytes_precise(UART_NUM_1, data, HU_DESTROY_LEN, BUSCOM_PAYLOAD_TIMEOUT_MS * 1000);
+                            
+                            if(length == HU_DESTROY_LEN){
+                                DestroyResponse(data[0], data[1], data[2]);
+                            }
+                            
                             break;
 
                         case HU_HEADER_SEEK:
@@ -467,6 +505,11 @@ static void buscom_tick_task(void *arg){
                     else currentMinute = 0;
                 };
             }
+
+            //Auto enable time increment for the next cycle
+            //phone will disable it if need be
+            //otherwise 147 will freak out
+            autoIncrementTime = true;
         }
     }
 }
@@ -475,7 +518,7 @@ static const char *TAG = "PWR_MON";
 
 void power_on_routine() {
     ESP_LOGW(TAG, "Sending warm CD status");
-    WarmBoot();
+    //WarmBoot();
 }
 
 //Monitor head unit power
@@ -563,6 +606,8 @@ void InitBuscom(void)
 {
     //Configure serial port
     SetUpBuscomPort();
+
+    WarmBoot();
 
     xTaskCreate(buscom_rx_task, "buscom_rx", 2048, NULL, 5, &buscom_rx_task_hdl);
     xTaskCreate(power_monitor_task, "pwr_monitor", 2048, NULL, 10, NULL);
